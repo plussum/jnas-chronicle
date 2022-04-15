@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+scp *.cgi  sakura:~/www/jnsa-clonicle/
+scp *.tsv  sakura:~/www/jnsa-clonicle/

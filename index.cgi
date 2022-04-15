@@ -102,10 +102,10 @@ while(<FD>){
 
 	my $dd = $item->{"Display Date"}//"";
 	if(! $dd ||  !($dd =~ /-\d{4}/)){
-		my $ymd = sprintf("%04d-%02d-%02d", $item->{Year}//"", $item->{Month}//"", $item->{Day}//"");
+		my $ymd = sprintf("%04d-%02d-%02d", 
+			&numeric($item->{Year}), &numeric($item->{Month}), &numeric($item->{Day}));
 		$item->{"Display Date"} = $ymd;
 	}
-
 	push(@NENPYOU, $item);
 }
 close(FD);
@@ -120,17 +120,27 @@ foreach my $item (@$DISPLAY_ITEMS){
 	}
 }
 
+sub	numeric
+{
+	my ($n) = @_;
+	$n = $n//"";
 
-
-#
-#
-#
-print "<br>";
-foreach my $nm (@names){
-	my @vals = $q->param($nm);
-	print "[" . join(":", $nm, @vals) . "]\n";
+	$n =~ s/\s//g;
+	$n = 0 if(!$n);
+   	$n = 0 if($n =~ /\D/);
+	return $n;
 }
-print "<br>";
+
+
+#
+#
+#
+#print "<br>";
+#foreach my $nm (@names){
+#	my @vals = $q->param($nm);
+#	print "[" . join(":", $nm, @vals) . "]\n";
+#}
+#print "<br>";
 
 &print_form();
 print "<hr>\n";
@@ -186,6 +196,7 @@ sub	gen_tag
 
 	my $etag = $tag;
 	$etag =~ s/\</\<\//;
+	$etag =~ s/ .*>/>/;
 	return ($tag . " $str " . $etag);
 }
 
@@ -225,24 +236,37 @@ sub	print_form
 {
 
 	print '<form action="' . $MY_URL . '" method="post">'. "\n";
+	print '<table>' . "\n";
+	my @w = ();
+	foreach my $p (@$params){
+		push(@w, $p->{tag});
+	}
+	print &gen_tag("<tr>", &print_item("<th>", @w)) . "\n"; 
+
+	my @forms = ();
 	foreach my $p (@$params){
 		my @group = @{$p->{params}};
 		my $tag = $p->{tag};
-		print $tag. ":\n";
+		#print $tag. ":\n";
 		#print '<select name="Group" size="' . ($#group+1) . '" multiple="multiple">' . "\n";
-		print '<select name="' . $p->{tag} . '" size="' . "5" . '" multiple="multiple">' . "\n";
+		my $str = '<select name="' . $p->{tag} . '" size="' . "5" . '" multiple="multiple">' . "\n";
 
 		my @selected_list = (defined $PARAMS->{$tag}) ? @{$PARAMS->{$tag}} : ();
 		foreach my $g ("$NA:$NA", @group, "$NA:$NA"){
 			my ($dsp, $val) = split(/:/, $g);
 			$val = $val//$dsp;
 			my $select = (grep{$_ eq $val} @selected_list) ? 'selected="selected"' : "";
-			print '<option ' . $select . 'value="' . $val . '">' . $dsp . '</option>' . "\n";
+			$str .= '<option ' . $select . 'value="' . $val . '">' . $dsp . '</option>' . "\n";
 		}
-		print '</select>' . "\n";
+		$str .= '</select>' . "\n";
+		push(@forms, $str);
 	}
 	#print '</p>' . "\n";
-    print '<p><input type="submit" name="submit" value="送信" /></p>' . "\n";
+    push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
+
+	print &gen_tag("<tr>", &print_item('<td valign="bottom">', @forms)) . "\n"; 
+	print '</table>' . "\n";
+
 	print '</form>' . "\n";
 }
 
