@@ -7,6 +7,7 @@ use warnings;
 
 use CGI;
 
+my $DEBUG = 0;
 my $jnsa_hist = "./jnsa-nenpyou.tsv";
 my $htmlf     = "./jnsa-nenpyou.html";
 my $dlm = "\t";
@@ -18,21 +19,29 @@ my $MY_URL = $ENV{REQUEST_URI};
 
 my $params = [
 	{tag => "Group", method => "select", 
-		params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security", "JNSA:jnsa"]
+		params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security",
+				 "JNSA:jnsa", "JNSA活動:JNSA-act", "JNSA会員数:JNSA-member", ]
 	},
 	{tag => "Year", method => "select",
 		params => [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011],
 	},
+	{tag => "Search", method => "text",
+		display_str => "seach", params => {size => 20, },
+	},
 ];
 
+my $param_index = {};
 my $param_vals = {};
 foreach my $p (@$params){
 	my $tag = $p->{tag};
+	$param_index->{$tag} = $p;
 	$param_vals->{$tag} = {};
-	foreach my $pp (@{$p->{params}}){
-		my ($dsp, $v) = split(/:/, $pp);
-		$v = $v//$dsp;
-		$param_vals->{$tag}->{$v} = $dsp;
+	if($p->{method} eq "select"){
+		foreach my $pp (@{$p->{params}}){
+			my ($dsp, $v) = split(/:/, $pp);
+			$v = $v//$dsp;
+			$param_vals->{$tag}->{$v} = $dsp;
+		}
 	}
 }
 
@@ -49,7 +58,13 @@ my @names = $q->param;
 
 foreach my $nm (@names){
 	my @w = $q->param($nm);
-	$PARAMS->{$nm} = [$q->param($nm)] if(! (grep{$_ eq $NA} @w));
+	my $p = $param_index->{$nm};
+	if($p->{method} eq "select"){
+		$PARAMS->{$nm} = [$q->param($nm)] if(! (grep{$_ eq $NA} @w));
+	}
+	else { 
+		$PARAMS->{$nm} = [$q->param($nm)]; 
+	}
 #	print join(":", $nm, @vals) . "<br>\n";
 }
 
@@ -69,12 +84,17 @@ my $head = <FD>;
 chop($head);
 my @ITEM_LIST = split(/$dlm/, $head);
 
+my $skey = $PARAMS->{Search}->[0]//"";
+print "### [$skey] ###\n" if($DEBUG);
 my $rn = 0;
 while(<FD>){
 	s/[\r\n]+$//;
 	my @w = split(/$dlm/, $_);
 	next if(! $w[0]//"");
 
+	if($skey){
+		next if(! /$skey/);	
+	}
 	my $item = {};
 	$item->{rn} = $rn++;
 	my $disp_flag = 1;
@@ -82,7 +102,7 @@ while(<FD>){
 		my $key = $ITEM_LIST[$i]//"-NONE $i-";
 		my $v = $w[$i];
 		$item->{$key} = $v;
-		if(defined $PARAMS->{$key}){
+		if(defined $PARAMS->{$key}){		# Group, Year
 			my $kv = $PARAMS->{$key};
 			#print "[$key:$v:" . join(@$kv) . "]" if($rn < 5);
 			my $hit = 0;
@@ -97,6 +117,7 @@ while(<FD>){
 				last;
 			}
 		}
+
 	}
 	next if(! $disp_flag);
 
@@ -120,6 +141,41 @@ foreach my $item (@$DISPLAY_ITEMS){
 	}
 }
 
+
+#
+#
+#
+if($DEBUG){
+	print "<br>";
+	foreach my $nm (@names){
+		my @vals = $q->param($nm);
+		print "[" . join(":", $nm, @vals) . "]\n";
+	}
+	print "<br>";
+}
+
+&print_form();
+print "<hr>\n";
+
+#
+#	Nenpyou 
+#
+print '<table class="sample">' . "\n";
+$head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
+print $head . "\n";
+foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
+	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
+	print $html . "\n";
+}
+print "</table>\n";
+print "</body>\n";
+print "</html>\n";
+
+exit 0;
+
+#
+#
+#
 sub	numeric
 {
 	my ($n) = @_;
@@ -130,36 +186,6 @@ sub	numeric
    	$n = 0 if($n =~ /\D/);
 	return $n;
 }
-
-
-#
-#
-#
-#print "<br>";
-#foreach my $nm (@names){
-#	my @vals = $q->param($nm);
-#	print "[" . join(":", $nm, @vals) . "]\n";
-#}
-#print "<br>";
-
-&print_form();
-print "<hr>\n";
-
-#
-#
-#
-print "<table>\n";
-$head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
-print $head . "\n";
-foreach my $item (@NENPYOU){
-	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))); 
-	print $html . "\n";
-}
-print "</table>\n";
-print "</body>\n";
-print "</html>\n";
-
-
 sub	print_item
 {
 	my ($tag, @items) = @_;
@@ -197,8 +223,69 @@ sub	gen_tag
 	my $etag = $tag;
 	$etag =~ s/\</\<\//;
 	$etag =~ s/ .*>/>/;
-	return ($tag . " $str " . $etag);
+	return ($tag . " $str " . $etag . "\n");
 }
+
+sub	print_form
+{
+
+	print '<form action="' . $MY_URL . '" method="post">'. "\n";
+	print '<table>' . "\n";
+	my @w = ();
+	foreach my $p (@$params){
+		push(@w, $p->{tag});
+	}
+	print &gen_tag("<tr>", &print_item("<th>", @w)) . "\n"; 
+
+	my @forms = ();
+	foreach my $p (@$params){
+		my $tag = $p->{tag};
+		my $str = "";
+		if($p->{method} eq "select"){
+			my @group = @{$p->{params}};
+			$str .= '<select name="' . $p->{tag} . '" size="' . "5" . '" multiple="multiple">' . "\n";
+
+			my @selected_list = (defined $PARAMS->{$tag}) ? @{$PARAMS->{$tag}} : ();
+			foreach my $g ("$NA:$NA", @group, "$NA:$NA"){
+				my ($dsp, $val) = split(/:/, $g);
+				$val = $val//$dsp;
+				my $select = (grep{$_ eq $val} @selected_list) ? 'selected="selected"' : "";
+				$str .= "\t" . '<option ' . $select . 'value="' . $val . '">' . $dsp . '</option>' . "\n";
+			}
+			$str .= '</select>' . "\n";
+		}
+		elsif($p->{method} eq "text"){
+			$str .= '<label for"' . $p->{tag} . '"' . $p->{display_str} . '</label>' . "\n";
+			$str .= "\t" . '<input type="text" id="' . $p->{tag} . '" name="' . $p->{tag} 
+					. '" ';
+			$str .= (defined $PARAMS->{$tag}) ? 'value="'.$PARAMS->{$tag}->[0].'" ' : "";
+			foreach my $t (keys %{$p->{params}}){
+				my $v = $p->{params}->{$t}//"";
+				if($v){
+					$str .= $t . '="' . $v . '" ';
+				}
+				else {
+					$str .= $t . ' ';
+				}
+			}
+
+			$str .=  '">' . "\n";
+
+		}
+		#print $str ;
+		#print "-" x 20 . "\n";
+		push(@forms, $str . "\n");
+	}
+	#print '</p>' . "\n";
+    push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
+
+	print &gen_tag("<tr>", &print_item('<td valign="top">', @forms)) . "\n"; 
+	print '</table>' . "\n";
+
+	print '</form>' . "\n";
+}
+
+
 
 
 sub	html_header
@@ -216,11 +303,22 @@ Content-type: text/html
 <meta charset="utf-8">
 <title> #TITLE# </title>
 <style>
+/*
 .table1 {
   border: 1px solid gray;
 }
 .table1 th, .table1 td {
   border: 1px solid gray;
+}
+*/
+/* 奇数行のスタイル */
+table.sample tr:nth-child(odd){
+  background-color:aliceblue;
+}
+ 
+/* 偶数行のスタイル */
+table.sample tr:nth-child(even){
+  background-color:white;
 }
 </style>
 </head>
@@ -229,45 +327,6 @@ _EOHTML_
 	$HTML_HEAD =~ s/#TITLE#/$title/g;
 	return $HTML_HEAD;
 
-}
-
-
-sub	print_form
-{
-
-	print '<form action="' . $MY_URL . '" method="post">'. "\n";
-	print '<table>' . "\n";
-	my @w = ();
-	foreach my $p (@$params){
-		push(@w, $p->{tag});
-	}
-	print &gen_tag("<tr>", &print_item("<th>", @w)) . "\n"; 
-
-	my @forms = ();
-	foreach my $p (@$params){
-		my @group = @{$p->{params}};
-		my $tag = $p->{tag};
-		#print $tag. ":\n";
-		#print '<select name="Group" size="' . ($#group+1) . '" multiple="multiple">' . "\n";
-		my $str = '<select name="' . $p->{tag} . '" size="' . "5" . '" multiple="multiple">' . "\n";
-
-		my @selected_list = (defined $PARAMS->{$tag}) ? @{$PARAMS->{$tag}} : ();
-		foreach my $g ("$NA:$NA", @group, "$NA:$NA"){
-			my ($dsp, $val) = split(/:/, $g);
-			$val = $val//$dsp;
-			my $select = (grep{$_ eq $val} @selected_list) ? 'selected="selected"' : "";
-			$str .= '<option ' . $select . 'value="' . $val . '">' . $dsp . '</option>' . "\n";
-		}
-		$str .= '</select>' . "\n";
-		push(@forms, $str);
-	}
-	#print '</p>' . "\n";
-    push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
-
-	print &gen_tag("<tr>", &print_item('<td valign="bottom">', @forms)) . "\n"; 
-	print '</table>' . "\n";
-
-	print '</form>' . "\n";
 }
 
 
