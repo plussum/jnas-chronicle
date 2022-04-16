@@ -72,7 +72,15 @@ foreach my $nm (@names){
 #	Gen HTML
 print &html_header("JNSA 年表") . "\n";
 print "<body>\n";
-#print join("\t", @ITEM_LIST) . "\n";
+
+if($DEBUG){		# Dump parameters
+	print "<br>";
+	foreach my $nm (@names){
+		my @vals = $q->param($nm);
+		print "[" . join(":", $nm, @vals) . "]\n";
+	}
+	print "<br>";
+}
 
 #
 #
@@ -92,7 +100,7 @@ while(<FD>){
 	my @w = split(/$dlm/, $_);
 	next if(! $w[0]//"");
 
-	if($skey){
+	if($skey){					# Search 
 		next if(! /$skey/);	
 	}
 	my $item = {};
@@ -102,7 +110,7 @@ while(<FD>){
 		my $key = $ITEM_LIST[$i]//"-NONE $i-";
 		my $v = $w[$i];
 		$item->{$key} = $v;
-		if(defined $PARAMS->{$key}){		# Group, Year
+		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
 			#print "[$key:$v:" . join(@$kv) . "]" if($rn < 5);
 			my $hit = 0;
@@ -119,19 +127,21 @@ while(<FD>){
 		}
 
 	}
-	next if(! $disp_flag);
+	next if(! $disp_flag);			# data does not much the parameter
 
-	my $dd = $item->{"Display Date"}//"";
+	my $dd = $item->{"Display Date"}//"";	# Set Display date from Year, Month, Day  
 	if(! $dd ||  !($dd =~ /-\d{4}/)){
 		my $ymd = sprintf("%04d-%02d-%02d", 
 			&numeric($item->{Year}), &numeric($item->{Month}), &numeric($item->{Day}));
 		$item->{"Display Date"} = $ymd;
 	}
-	push(@NENPYOU, $item);
+	push(@NENPYOU, $item);			# Records to display
 }
 close(FD);
 
-
+#
+#	Set array no of Display_ITEMS
+#
 foreach my $item (@$DISPLAY_ITEMS){
 	for(my $i = 0; $i <= $#ITEM_LIST; $i++){
 		if($item eq $ITEM_LIST[$i]){
@@ -143,23 +153,11 @@ foreach my $item (@$DISPLAY_ITEMS){
 
 
 #
+#	Print HTML
 #
-#
-if($DEBUG){
-	print "<br>";
-	foreach my $nm (@names){
-		my @vals = $q->param($nm);
-		print "[" . join(":", $nm, @vals) . "]\n";
-	}
-	print "<br>";
-}
-
-&print_form();
+&print_form();			# forms
 print "<hr>\n";
 
-#
-#	Nenpyou 
-#
 print '<table class="sample">' . "\n";
 $head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
 print $head . "\n";

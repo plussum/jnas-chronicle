@@ -1,3 +1,3 @@
 #!/bin/sh
-scp *.cgi  sakura:~/www/jnsa-clonicle/
-scp *.tsv  sakura:~/www/jnsa-clonicle/
+scp -4 *.cgi  sakura:~/www/jnsa-clonicle/
+scp -4 *.tsv  sakura:~/www/jnsa-clonicle/
