@@ -4,10 +4,8 @@
 #
 use strict;
 use warnings;
-use CGI;
 
-#use lib "./";
-#use dp;
+use CGI;
 
 my $DEBUG = 0;
 my $jnsa_hist = "./jnsa-nenpyou.tsv";
@@ -17,44 +15,40 @@ my $NA = "N/A";
 
 my $MY_URL = $ENV{REQUEST_URI};
 
-# Group   Year    Month   Day     Time    End Year        End Month       End Day End Time        Display Date    Title   Detail  林コメント/修正案       URL     Image URL       Im age Credit      Type    Color
-
-my $form_params = [
-	[
-		{tag => "Group", method => "select", 
-			params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security",
-					 "JNSA:jnsa", "JNSA活動:JNSA-act", "JNSA会員数:JNSA-member", ]
-		},
-		{tag => "Year", method => "select",
-			params => [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011],
-		},
-		{tag => "Search", method => "text",
-			display_str => "seach", params => {size => 20, },
-		},
-		{tag => "Download", method => "submit", display_str => "Download",}, 
-		{tag => "upload", method => "file", display_str => "upload", params => {accept => "text/csv,image/plain"}}, 
-		{tag => "送信", method => "submit", display_str => "送信", },
-    	# push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
-	],
-
+my $params = [
+	{tag => "Group", method => "select", 
+		params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security",
+				 "JNSA:jnsa", "JNSA活動:JNSA-act", "JNSA会員数:JNSA-member", ]
+	},
+	{tag => "Date", method => "select",
+		params => [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 
+					2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 
+					2020, 2021, 2022, 2023,
+				],
+	},
+	{tag => "Title", method => "text",
+		display_str => "Title", params => {size => 60 },
+	},
+	{tag => "Detail", method => "textarea",
+		display_str => "detail", params => {rows => 4, cols => 60, },
+	},
 ];
 
 my $param_index = {};
 my $param_vals = {};
-foreach my $params (@$form_params){
-	foreach my $p (@$params){
-		my $tag = $p->{tag};
-		$param_index->{$tag} = $p;
-		$param_vals->{$tag} = {};
-		if($p->{method} eq "select"){
-			foreach my $pp (@{$p->{params}}){
-				my ($dsp, $v) = split(/:/, $pp);
-				$v = $v//$dsp;
-				$param_vals->{$tag}->{$v} = $dsp;
-			}
+foreach my $p (@$params){
+	my $tag = $p->{tag};
+	$param_index->{$tag} = $p;
+	$param_vals->{$tag} = {};
+	if($p->{method} eq "select"){
+		foreach my $pp (@{$p->{params}}){
+			my ($dsp, $v) = split(/:/, $pp);
+			$v = $v//$dsp;
+			$param_vals->{$tag}->{$v} = $dsp;
 		}
 	}
 }
+
 
 my 	$DISPLAY_ITEMS = ["Group", "Display Date", "Title", "Detail"];
 my 	$DISPLAY_ITEMS_NO = [];
@@ -64,31 +58,18 @@ my 	$DISPLAY_ITEMS_NO = [];
 #
 my $PARAMS = {};
 my $q = new CGI;
-
 my @names = $q->param;
-my $cgi = 1;
-if($MY_URL){		# command line
-	foreach my $nm (@names){
-		my @w = $q->param($nm);
-		my $p = $param_index->{$nm};
-		if($p->{method} eq "select"){
-			$PARAMS->{$nm} = [$q->param($nm)] if(! (grep{$_ eq $NA} @w));
-		}
-		else { 
-			$PARAMS->{$nm} = [$q->param($nm)]; 
-		}
+
+foreach my $nm (@names){
+	my @w = $q->param($nm);
+	my $p = $param_index->{$nm};
+	if($p->{method} eq "select"){
+		$PARAMS->{$nm} = [$q->param($nm)] if(! (grep{$_ eq $NA} @w));
 	}
-}
-else {
-	$MY_URL = "command_line";
-	$cgi = 0;
-	@names = ();
-	my @dm_params = ["Group:society", "Year:2001", "Search:", "submit:送信"];
-	foreach my $p (@dm_params){
-		my($nm, @vals) = split(/:/, $p);
-		push(@names, $nm);
-		$PARAMS->{$nm} = [@vals];
+	else { 
+		$PARAMS->{$nm} = [$q->param($nm)]; 
 	}
+#	print join(":", $nm, @vals) . "<br>\n";
 }
 
 #
@@ -96,13 +77,12 @@ else {
 print &html_header("JNSA 年表") . "\n";
 print "<body>\n";
 
-if(1){		# Dump parameters
+if($DEBUG){		# Dump parameters
 	print "<br>";
 	foreach my $nm (@names){
-		my @vals = ($cgi) ? $q->param($nm) : @{$PARAMS->{$nm}};
+		my @vals = $q->param($nm);
 		print "[" . join(":", $nm, @vals) . "]\n";
 	}
-	#dp::dp "[$0]\n";
 	print "<br>";
 }
 
@@ -117,7 +97,7 @@ chop($head);
 my @ITEM_LIST = split(/$dlm/, $head);
 
 my $skey = $PARAMS->{Search}->[0]//"";
-#dp::dp "### [$skey] ###\n" if($DEBUG);
+print "### [$skey] ###\n" if($DEBUG);
 my $rn = 0;
 while(<FD>){
 	s/[\r\n]+$//;
@@ -136,13 +116,13 @@ while(<FD>){
 		$item->{$key} = $v;
 		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
-			#dp::dp "[$key:$v:" . join(@$kv) . "]" if($rn < 5);
+			#print "[$key:$v:" . join(@$kv) . "]" if($rn < 5);
 			my $hit = 0;
 			foreach my $pv (@$kv){
 				my $dsp = $param_vals->{$key}->{$pv};
 				$hit++ if($v eq $param_vals->{$key}->{$pv});
 
-				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")" if($rn < 5);
+				#print "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")" if($rn < 5);
 			}
 			if($hit <= 0){
 				$disp_flag = 0;
@@ -179,13 +159,8 @@ foreach my $item (@$DISPLAY_ITEMS){
 #
 #	Print HTML
 #
-print '<table>' . "\n";
-foreach my $params (@$form_params){
-	&print_form($params);			# forms
-}
-print '</table>' . "\n";
+&print_form();			# forms
 print "<hr>\n";
-
 
 print '<table class="sample">' . "\n";
 $head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
@@ -255,15 +230,13 @@ sub	gen_tag
 
 sub	print_form
 {
-	my ($params) = @_;
 
 	print '<form action="' . $MY_URL . '" method="post">'. "\n";
+	print '<table>' . "\n";
 	my @w = ();
 	foreach my $p (@$params){
 		push(@w, $p->{tag});
-		#dp::dp "[$params]" . $p->{tag} . "\n";
 	}
-	#my $submit = $params->[scalar(@$params) - 1];
 	print &gen_tag("<tr>", &print_item("<th>", @w)) . "\n"; 
 
 	my @forms = ();
@@ -283,51 +256,53 @@ sub	print_form
 			}
 			$str .= '</select>' . "\n";
 		}
-		elsif($p->{method} eq "text"){
+		elsif($p->{method} eq "textarea"){		# TEXTAREA
 			$str .= '<label for"' . $p->{tag} . '"' . $p->{display_str} . '</label>' . "\n";
-			$str .= "\t" . '<input type="text" id="' . $p->{tag} . '" name="' . $p->{tag} 
-					. '" ';
-			#dp::dp "[$tag] [$PARAMS->{$tag}] " . ($PARAMS->{$tag}->[0]//"") . "\n";
-			$str .= (defined $PARAMS->{$tag}) ? 'value="'.($PARAMS->{$tag}->[0]//"").'" ' : "";
-			$str .= &add_params($p);
+			$str .= "\t" . '<textarea name="' . $p->{tag} . '" ';
+			$str .= (defined $PARAMS->{$tag}) ? 'value="'.$PARAMS->{$tag}->[0].'" ' : "";
+			foreach my $t (keys %{$p->{params}}){
+				my $v = $p->{params}->{$t}//"";
+				if($v){
+					$str .= $t . '="' . $v . '" ';
+				}
+				else {
+					$str .= $t . ' ';
+				}
+			}
+			$str .= '>';
+			$str .= (defined $PARAMS->{$tag}) ? $PARAMS->{$tag}->[0] : "";
+			$str .= "</textarea>\n";
+		}
+		elsif($p->{method} eq "text"){			# TEXT
+			$str .= '<label for"' . $p->{tag} . '"' . $p->{display_str} . '</label>' . "\n";
+			$str .= "\t" . '<input type="text" id="' . $p->{tag} . '" name="' . $p->{tag} . '" ';
+			$str .= (defined $PARAMS->{$tag}) ? 'value="'.$PARAMS->{$tag}->[0].'" ' : "";
+			foreach my $t (keys %{$p->{params}}){
+				my $v = $p->{params}->{$t}//"";
+				if($v){
+					$str .= $t . '="' . $v . '" ';
+				}
+				else {
+					$str .= $t . ' ';
+				}
+			}
 			$str .=  '>' . "\n";
+		}
 
-		}
-		elsif($p->{method} eq "file"){
-			$str = sprintf('<p><input type="%s" name="%s" %s></p>', $p->{method}, $p->{tag}, &add_params($p)) . "\n";
-		}
-		elsif($p->{method} eq "submit"){
-			$str = sprintf('<p><input type="%s" name="%s" value="%s"></p>', $p->{method}, $p->{tag}, $p->{display_str}) . "\n";
-		}
 		#print $str ;
 		#print "-" x 20 . "\n";
 		push(@forms, $str . "\n");
 	}
 	#print '</p>' . "\n";
-	#my $submit_str = sprintf('<p><input type="%s" name="%s" value="%s" /></p>', $submit->{method}, $submit->{tag}, $submit->{display_str}) . "\n";
-	#push(@forms, $submit_str);
-    #push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
+    push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
 
 	print &gen_tag("<tr>", &print_item('<td valign="top">', @forms)) . "\n"; 
+	print '</table>' . "\n";
+
 	print '</form>' . "\n";
 }
 
-sub	add_params
-{
-	my ($p) = @_;
 
-	my $str = "";
-	foreach my $t (keys %{$p->{params}}){
-		my $v = $p->{params}->{$t}//"";
-		if($v){
-			$str .= $t . '="' . $v . '" ';
-		}
-		else {
-			$str .= $t . ' ';
-		}
-	}
-	return $str;
-}
 
 
 sub	html_header
@@ -338,7 +313,7 @@ sub	html_header
 my $HTML_HEAD = <<_EOHTML_;
 Content-type: text/html
 
-
+ 
 <!DOCTYPE html>
 <html>
 <head>
