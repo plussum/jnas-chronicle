@@ -1,19 +1,48 @@
 #!/usr/bin/perl
 #
+# http://192.168.1.13/cgi-bin/jnsa/
 #
 #
 use strict;
 use warnings;
 use CGI;
 
-#use lib "./";
-#use dp;
+use lib "./";
+use dp;
 
 my $DEBUG = 0;
 my $jnsa_hist = "./jnsa-nenpyou.tsv";
 my $htmlf     = "./jnsa-nenpyou.html";
 my $dlm = "\t";
 my $NA = "N/A";
+
+
+my $HTML_STYLE = <<_EOSTYLE_;
+.upload {
+	display: none;
+	color: #f0f0f0; /* ラベルテキストの色を指定する */
+	background-color: #000000;/* ラベルの背景色を指定する */
+	padding: 10px; /* ラベルとテキスト間の余白を指定する */
+	border: double 4px #f0f0f0;/* ラベルのボーダーを指定する */
+}
+
+table.form {
+  border: 1px solid gray;
+}
+table.form th, .table1 td {
+  border: 1px solid gray;
+}
+
+/* 奇数行のスタイル */
+table.sample tr:nth-child(odd){
+  background-color:aliceblue;
+}
+ 
+/* 偶数行のスタイル */
+table.sample tr:nth-child(even){
+  background-color:white;
+}
+_EOSTYLE_
 
 my $MY_URL = $ENV{REQUEST_URI};
 
@@ -31,10 +60,10 @@ my $form_params = [
 		{tag => "Search", method => "text",
 			display_str => "seach", params => {size => 20, },
 		},
-		{tag => "Download", method => "submit", display_str => "Download",}, 
-		{tag => "upload", method => "file", display_str => "upload", params => {accept => "text/csv,image/plain"}}, 
-		{tag => "送信", method => "submit", display_str => "送信", },
     	# push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
+		{tag => "Download", method => "submit", display_str => "Download",}, 
+		{tag => "upload", method => "file", display_str => "upload data", params => {accept => "text/csv,image/plain"}}, 
+		{tag => "送信", method => "submit", display_str => "送信", },
 	],
 
 ];
@@ -56,7 +85,7 @@ foreach my $params (@$form_params){
 	}
 }
 
-my 	$DISPLAY_ITEMS = ["Group", "Display Date", "Title", "Detail"];
+my 	$DISPLAY_ITEMS = ["Display Date", "Group", "Title", "Detail"];
 my 	$DISPLAY_ITEMS_NO = [];
 
 #
@@ -179,26 +208,98 @@ foreach my $item (@$DISPLAY_ITEMS){
 #
 #	Print HTML
 #
-print '<table>' . "\n";
 foreach my $params (@$form_params){
+	print '<table class="form" border="1">' . "\n";
 	&print_form($params);			# forms
+	print '</table>' . "\n";
 }
-print '</table>' . "\n";
 print "<hr>\n";
 
 
 print '<table class="sample">' . "\n";
 $head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
 print $head . "\n";
+my $last_date = "0000-00";
+my @item_list = ();
+
+my $na = {};
+foreach my $k (@ITEM_LIST){
+	#dp::dp "$k\n";
+	#$na->{$k} = "&nbsp;";
+	$na->{$k} = "-";
+}
+
 foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
-	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
+	$item->{"Display Date"} =~ /\d{4}-\d{2}/;
+	my $item_date = $&;
+	if($item_date eq $last_date){
+		push(@item_list, $item);
+		next;
+	}
+
+	#dp::dp "[$last_date:$item_date]" . join(",", &item_list($item, $DISPLAY_ITEMS_NO)) . "\n";
+
+#	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
+	my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
+	print $html . "\n";
+
+	foreach my $ym (&month_diff($last_date, $item_date)){
+		#dp::dp ">>>> $ym" . "\n";
+		$na->{"Display Date"} = $ym . "-00";
+		my $html = &gen_tag("<tr>", &print_item("<td>", &item_list($na, $DISPLAY_ITEMS_NO))) ; 
+		print $html . "\n";
+	}
+
+	@item_list = ($item);
+	$last_date = $item_date;
+}
+if($#item_list >= 0){
+	my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
 	print $html . "\n";
 }
+
 print "</table>\n";
 print "</body>\n";
 print "</html>\n";
 
 exit 0;
+
+
+sub	month_diff
+{
+	my ($last_date, $item_date) = @_;
+	if($last_date lt "2000-00"){
+		return ();
+	}
+
+	#dp::dp "[$last_date:$item_date]\n";
+	my @month = ();
+	$last_date =~ /(\d{4})-(\d{2})/;
+	my ($y, $m) = ($1, $2);
+	for(;;){
+		($y, $m) = &increment_month($y, $m);
+		my $date = sprintf("%04d-%02d", $y, $m);
+		last if($date ge $item_date);
+
+		#dp::dp "[$date:$item_date]\n";
+		push(@month, $date);
+	}
+	return (@month);
+}
+
+sub	increment_month
+{
+	my($y, $m) = @_;
+
+	if($m < 12){
+		$m++;
+	}
+	else {
+		$m = 0;
+		$y++;
+	}
+	return ($y, $m);
+}
 
 #
 #
@@ -212,6 +313,31 @@ sub	numeric
 	$n = 0 if(!$n);
    	$n = 0 if($n =~ /\D/);
 	return $n;
+}
+sub	print_item_list
+{
+	my ($tag, @items) = @_;
+	$tag = $tag//$dlm;
+
+	my @item_list = ();	
+	foreach my $item (@items){
+		my @w = &item_list($item, $DISPLAY_ITEMS_NO); 
+		#dp::dp join(",", @w) . "\n";
+		push(@item_list, [@w]) ; 
+	}
+
+	my $str = "";
+	foreach (my $i = 0; $i < scalar(@$DISPLAY_ITEMS_NO); $i++){
+		my @w = ();
+		foreach my $item (@item_list){
+			push(@w, $item->[$i]);
+		}
+		my $s = join("<br>", @w);
+		my $it = &gen_tag($tag, $s);
+		#dp::dp "[$it]\n";
+		$str .= $it;
+	}
+	return $str;
 }
 sub	print_item
 {
@@ -260,7 +386,9 @@ sub	print_form
 	print '<form action="' . $MY_URL . '" method="post">'. "\n";
 	my @w = ();
 	foreach my $p (@$params){
-		push(@w, $p->{tag});
+		my $head = $p->{display_str}//"";
+		$head = $p->{tag} if(! $head); 
+		push(@w, $head);
 		#dp::dp "[$params]" . $p->{tag} . "\n";
 	}
 	#my $submit = $params->[scalar(@$params) - 1];
@@ -290,14 +418,18 @@ sub	print_form
 			#dp::dp "[$tag] [$PARAMS->{$tag}] " . ($PARAMS->{$tag}->[0]//"") . "\n";
 			$str .= (defined $PARAMS->{$tag}) ? 'value="'.($PARAMS->{$tag}->[0]//"").'" ' : "";
 			$str .= &add_params($p);
-			$str .=  '>' . "\n";
+			$str .=  '/>' . "\n";
 
 		}
 		elsif($p->{method} eq "file"){
-			$str = sprintf('<p><input type="%s" name="%s" %s></p>', $p->{method}, $p->{tag}, &add_params($p)) . "\n";
+			#$str = sprintf('<p><label> Select <input type="%s" class="upload" /></label></p>', 
+			#			$p->{method}, $p->{tag}, &add_params($p)) . "\n";
+			$str = sprintf('<p><input type="%s" name="%s" %s></p>', 
+						$p->{method}, $p->{display_str}, &add_params($p)//"") . "\n";
 		}
 		elsif($p->{method} eq "submit"){
-			$str = sprintf('<p><input type="%s" name="%s" value="%s"></p>', $p->{method}, $p->{tag}, $p->{display_str}) . "\n";
+			$str = sprintf('<p><input type="%s" name="%s" value="%s"></p>',
+						 $p->{method}, $p->{tag}, $p->{display_str}) . "\n";
 		}
 		#print $str ;
 		#print "-" x 20 . "\n";
@@ -345,23 +477,7 @@ Content-type: text/html
 <meta charset="utf-8">
 <title> #TITLE# </title>
 <style>
-/*
-.table1 {
-  border: 1px solid gray;
-}
-.table1 th, .table1 td {
-  border: 1px solid gray;
-}
-*/
-/* 奇数行のスタイル */
-table.sample tr:nth-child(odd){
-  background-color:aliceblue;
-}
- 
-/* 偶数行のスタイル */
-table.sample tr:nth-child(even){
-  background-color:white;
-}
+$HTML_STYLE
 </style>
 </head>
 _EOHTML_
