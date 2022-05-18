@@ -19,11 +19,11 @@ my $NA = "N/A";
 my $spread_sheet = 'https://docs.google.com/spreadsheets/d/1RGa0W19wC2NXOm4Fd_6eYlw_NPgbud2EbuU8aobZh2s/edit?pli=1#gid=1801759358';
 
 my @table_color = ("white", "lightsteelblue"); #"aliceblue");
-my 	$DISPLAY_ITEMS = ["Display Date", "Group", "Title", "Detail",];# "URL"];
-my 	$DISPLAY_WIDTH = [200, 200, 600, 200, 100];
+my 	$DISPLAY_ITEMS = ["Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
+my 	$DISPLAY_WIDTH = [20, 150, 200, 600, 200, 100];
 my 	$DISPLAY_ITEMS_NO = [];
 
-my @dm_params = ("Group:", "Year:2009", "Search:", "送信:送信", ); #"Download:Download");
+my @dm_params = ("Group:", "Year:2011", "Search:", "送信:送信", ); #"Download:Download");
 
 my $HTML_STYLE = <<_EOSTYLE_;
 .upload {
@@ -58,6 +58,9 @@ my $MY_URL = $ENV{REQUEST_URI};
 
 my $form_params = [
 	[
+		{tag => "Evaluation", method => "select", 
+			params => [0,1]
+		},
 		{tag => "Group", method => "select", 
 			params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security",
 					 "JNSA:jnsa", "JNSA活動:JNSA-act", "JNSA会員数:JNSA-member", ]
@@ -75,7 +78,6 @@ my $form_params = [
 	],
 
 ];
-
 
 
 my $param_index = {};
@@ -179,7 +181,9 @@ my $rn = 0;
 while(<FD>){
 	s/[\r\n]+$//;
 	#dp::dp $_ . "\n";
-	my @w = split(/$dlm/, $_);
+
+	my $str = &escape_html($_);
+	my @w = split(/$dlm/, $str);
 	next if(! $w[0]//"");
 
 	if($skey){					# Search 
@@ -257,6 +261,7 @@ $head =  "<tr>";
 for(my $i = 0; $i < scalar(@$DISPLAY_ITEMS); $i++){
 	my $item = $DISPLAY_ITEMS->[$i];
 	my $width = $DISPLAY_WIDTH->[$i]//0;
+	$item =~ s/Evaluation/EV/;
 	$head .= 	&print_item("<th bgcolor=\"gray\" width=\"$width\">", $item); 
 }
 $head .= "</tr>\n";
@@ -281,24 +286,14 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 		push(@item_list, $item);
 		next;
 	}
-
 	#dp::dp "[$last_date:$item_date]" . join(",", &item_list($item, $DISPLAY_ITEMS_NO)) . "\n";
-
 #	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
 
 	my $cl = $table_color[$month_no % 2];
 	foreach my $item (@item_list){
-		my $url = $item->{URL}//"";
-		my $title = $item->{Title}//"NO TITLE";
-		if($url =~ /https*:/){
-			$item->{Title} = "<a href=\"$url\" target=\"_blank\">$title</a>"; 
-		}
-		#dp::dp "$url\n";
-		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
-		print $html . "\n";
+		print &row($item, $cl);
 	}	
 	#my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
-
 	$month_no++;
 
 	foreach my $ym (&month_diff($last_date, $item_date)){
@@ -315,8 +310,10 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 	$last_date = $item_date;
 }
 if($#item_list >= 0){
-	my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
-	print $html . "\n";
+	my $cl = $table_color[$month_no % 2];
+	foreach my $item (@item_list){
+		print &row($item, $cl);
+	}	
 }
 
 print "</table>\n";
@@ -325,6 +322,20 @@ print "</html>\n";
 
 exit 0;
 
+
+sub	row
+{
+	my($item, $cl) = @_;
+
+	my $url = $item->{URL}//"";
+	my $title = $item->{Title}//"NO TITLE";
+	if($url =~ /https*:/){
+		$item->{Title} = "<a href=\"$url\" target=\"_blank\">$title</a>"; 
+	}
+	#dp::dp "$url\n";
+	my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
+	return $html;
+}
 
 sub	month_diff
 {
@@ -427,6 +438,7 @@ sub	item_list
 	foreach my $i (@$targets){
 		push(@ww, $vals[$i]);
 	}
+	#dp::dp join(",", $#ww, @ww) . "<br>\n";
 	return @ww;
 }
 
@@ -562,11 +574,11 @@ sub	downlad_chroncile
 	my $cmd = "wget -O $fname '$url'";
 
 	my $cwd = `pwd`;
-	dp::dp "$cwd<br>\n";
-	dp::dp "copy $fname, $fname.back<br>\n";
+	dp::dp "$cwd<br>\n" if($DEBUG);
+	dp::dp "copy $fname, $fname.back<br>\n" if($DEBUG);
 	copy($fname, "$fname.back");
 
-	dp::dp $cmd . "<br>\n";
+	dp::dp $cmd . "<br>\n" if($DEBUG);
 	system($cmd);
 
 	if(0){
@@ -581,4 +593,17 @@ sub	downlad_chroncile
 		close(FD);
 	}
 	return 0;
+}
+
+sub	escape_html
+{
+	my ($str) = @_;
+
+    $str =~ s/&/&amp;/go;
+    $str =~ s/\"/&quot;/go; #" make emacs happy
+    $str =~ s/>/&gt;/go;
+    $str =~ s/</&lt;/go;
+
+    $str =~ s/\|/&brvbar;/go;
+    return $str;
 }
