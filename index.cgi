@@ -6,6 +6,7 @@
 use strict;
 use warnings;
 use CGI;
+use File::Copy;
 
 use lib "./";
 use dp;
@@ -15,7 +16,14 @@ my $jnsa_hist = "./jnsa-nenpyou.tsv";
 my $htmlf     = "./jnsa-nenpyou.html";
 my $dlm = "\t";
 my $NA = "N/A";
+my $spread_sheet = 'https://docs.google.com/spreadsheets/d/1RGa0W19wC2NXOm4Fd_6eYlw_NPgbud2EbuU8aobZh2s/edit?pli=1#gid=1801759358';
 
+my @table_color = ("white", "lightsteelblue"); #"aliceblue");
+my 	$DISPLAY_ITEMS = ["Display Date", "Group", "Title", "Detail",];# "URL"];
+my 	$DISPLAY_WIDTH = [200, 200, 600, 200, 100];
+my 	$DISPLAY_ITEMS_NO = [];
+
+my @dm_params = ("Group:", "Year:2009", "Search:", "送信:送信", ); #"Download:Download");
 
 my $HTML_STYLE = <<_EOSTYLE_;
 .upload {
@@ -68,6 +76,8 @@ my $form_params = [
 
 ];
 
+
+
 my $param_index = {};
 my $param_vals = {};
 foreach my $params (@$form_params){
@@ -84,9 +94,6 @@ foreach my $params (@$form_params){
 		}
 	}
 }
-
-my 	$DISPLAY_ITEMS = ["Display Date", "Group", "Title", "Detail"];
-my 	$DISPLAY_ITEMS_NO = [];
 
 #
 #	CGI Params
@@ -108,32 +115,53 @@ if($MY_URL){		# command line
 		}
 	}
 }
-else {
+else {		# for commandline debug
 	$MY_URL = "command_line";
 	$cgi = 0;
 	@names = ();
-	my @dm_params = ["Group:society", "Year:2001", "Search:", "submit:送信"];
 	foreach my $p (@dm_params){
 		my($nm, @vals) = split(/:/, $p);
-		push(@names, $nm);
-		$PARAMS->{$nm} = [@vals];
+		dp::dp "$nm: $#vals\n";
+		if($#vals >= 0){
+			push(@names, $nm);
+			$PARAMS->{$nm} = [@vals] ;
+		}
 	}
 }
 
+
 #
 #	Gen HTML
+#
 print &html_header("JNSA 年表") . "\n";
 print "<body>\n";
 
-if(1){		# Dump parameters
+my $params = {};
+foreach my $nm (@names){
+	my @vals = ($cgi) ? $q->param($nm) : @{$PARAMS->{$nm}};
+	$params->{$nm} = [@vals];
+}
+
+if($DEBUG){		# Dump parameters
 	print "<br>";
-	foreach my $nm (@names){
-		my @vals = ($cgi) ? $q->param($nm) : @{$PARAMS->{$nm}};
-		print "[" . join(":", $nm, @vals) . "]\n";
+	foreach my $nm (keys %$params){
+		print "[" . join(":", $nm, @{$params->{$nm}}) . "]\n";
 	}
 	#dp::dp "[$0]\n";
 	print "<br>";
 }
+
+#
+#	Download Chronicle data from Google Drive
+#
+my @dl = ();
+@dl = @{$params->{Download}} if(defined $params->{Download});
+#print "Download: " . join(",", $#dl, @dl) . "<br>\n";
+if($#dl >= 0 ){
+	print "Download<br>\n";
+	&downlad_chroncile();
+}
+
 
 #
 #
@@ -150,6 +178,7 @@ my $skey = $PARAMS->{Search}->[0]//"";
 my $rn = 0;
 while(<FD>){
 	s/[\r\n]+$//;
+	#dp::dp $_ . "\n";
 	my @w = split(/$dlm/, $_);
 	next if(! $w[0]//"");
 
@@ -163,13 +192,14 @@ while(<FD>){
 		my $key = $ITEM_LIST[$i]//"-NONE $i-";
 		my $v = $w[$i];
 		$item->{$key} = $v;
+		#dp::dp "[$i:$key:$v]\n";
 		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
-			#dp::dp "[$key:$v:" . join(@$kv) . "]" if($rn < 5);
+			#dp::dp "[$key:$v:" . join(@$kv) . "]\n" if($rn < 5);
 			my $hit = 0;
 			foreach my $pv (@$kv){
 				my $dsp = $param_vals->{$key}->{$pv};
-				$hit++ if($v eq $param_vals->{$key}->{$pv});
+				$hit++ if($v eq ($param_vals->{$key}->{$pv}//""));
 
 				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")" if($rn < 5);
 			}
@@ -215,9 +245,22 @@ foreach my $params (@$form_params){
 }
 print "<hr>\n";
 
+#
+#	Link to spread sheet
+#
+print "<a href=\"$spread_sheet\">元データ(Spread Sheet)</a><br>" . "\n";
 
-print '<table class="sample">' . "\n";
-$head =  &gen_tag("<tr>", &print_item("<th>", @$DISPLAY_ITEMS)); 
+
+#print '<table class="sample">' . "\n";
+print '<table>' . "\n";
+$head =  "<tr>";
+for(my $i = 0; $i < scalar(@$DISPLAY_ITEMS); $i++){
+	my $item = $DISPLAY_ITEMS->[$i];
+	my $width = $DISPLAY_WIDTH->[$i]//0;
+	$head .= 	&print_item("<th bgcolor=\"gray\" width=\"$width\">", $item); 
+}
+$head .= "</tr>\n";
+#$head =  &gen_tag("<tr>", &print_item('<th bgcolor="gray">', @$DISPLAY_ITEMS)); 
 print $head . "\n";
 my $last_date = "0000-00";
 my @item_list = ();
@@ -228,6 +271,8 @@ foreach my $k (@ITEM_LIST){
 	#$na->{$k} = "&nbsp;";
 	$na->{$k} = "-";
 }
+
+my	$month_no = 0;
 
 foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
 	$item->{"Display Date"} =~ /\d{4}-\d{2}/;
@@ -240,14 +285,30 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 	#dp::dp "[$last_date:$item_date]" . join(",", &item_list($item, $DISPLAY_ITEMS_NO)) . "\n";
 
 #	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
-	my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
-	print $html . "\n";
+
+	my $cl = $table_color[$month_no % 2];
+	foreach my $item (@item_list){
+		my $url = $item->{URL}//"";
+		my $title = $item->{Title}//"NO TITLE";
+		if($url =~ /https*:/){
+			$item->{Title} = "<a href=\"$url\" target=\"_blank\">$title</a>"; 
+		}
+		#dp::dp "$url\n";
+		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
+		print $html . "\n";
+	}	
+	#my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
+
+	$month_no++;
 
 	foreach my $ym (&month_diff($last_date, $item_date)){
 		#dp::dp ">>>> $ym" . "\n";
+		$cl = $table_color[$month_no % 2];
 		$na->{"Display Date"} = $ym . "-00";
-		my $html = &gen_tag("<tr>", &print_item("<td>", &item_list($na, $DISPLAY_ITEMS_NO))) ; 
+
+		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($na, $DISPLAY_ITEMS_NO))) ; 
 		print $html . "\n";
+		$month_no++;
 	}
 
 	@item_list = ($item);
@@ -487,4 +548,37 @@ _EOHTML_
 
 }
 
+#
+#
+#
+sub	downlad_chroncile
+{
+	my $key = '1RGa0W19wC2NXOm4Fd_6eYlw_NPgbud2EbuU8aobZh2s';
+	my $gid = '1801759358';
+	my $format = 'tsv';
+	my $fname = "./jnsa-nenpyou" . ".$format";
 
+	my $url = "https://docs.google.com/spreadsheets/d/$key/export?gid=$gid&format=$format";
+	my $cmd = "wget -O $fname '$url'";
+
+	my $cwd = `pwd`;
+	dp::dp "$cwd<br>\n";
+	dp::dp "copy $fname, $fname.back<br>\n";
+	copy($fname, "$fname.back");
+
+	dp::dp $cmd . "<br>\n";
+	system($cmd);
+
+	if(0){
+		print  "-" x 40 . "\n";
+
+		open(FD, $fname) || die "$fname";
+		my $ln = 0;
+		while(<FD>){
+			last if($ln++ > 20);
+			print $_;
+		}
+		close(FD);
+	}
+	return 0;
+}
