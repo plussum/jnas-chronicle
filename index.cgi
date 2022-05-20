@@ -14,52 +14,27 @@ use dp;
 my $DEBUG = 0;
 my $jnsa_hist = "./jnsa-nenpyou.tsv";
 my $htmlf     = "./jnsa-nenpyou.html";
-my $dlm = "\t";
-my $NA = "N/A";
 my $spread_sheet = 'https://docs.google.com/spreadsheets/d/1RGa0W19wC2NXOm4Fd_6eYlw_NPgbud2EbuU8aobZh2s/edit?pli=1#gid=1801759358';
+my $MY_URL = $ENV{REQUEST_URI};
+my $dlm = "\t";
+my $NA = "ALL";
+my $NIL = "NIL";
 
 my @table_color = ("white", "lightsteelblue"); #"aliceblue");
-my 	$DISPLAY_ITEMS = ["Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
-my 	$DISPLAY_WIDTH = [20, 150, 200, 600, 200, 100];
-my 	$DISPLAY_ITEMS_NO = [];
-
+my $DISPLAY_ITEMS = ["Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
+my $DISPLAY_WIDTH = [20, 150, 200, 600, 200, 100];				# cell width by dot
+my $DISPLAY_ITEMS_NO = [];
 my @dm_params = ("Group:", "Year:2011", "Search:", "送信:送信", ); #"Download:Download");
 
-my $HTML_STYLE = <<_EOSTYLE_;
-.upload {
-	display: none;
-	color: #f0f0f0; /* ラベルテキストの色を指定する */
-	background-color: #000000;/* ラベルの背景色を指定する */
-	padding: 10px; /* ラベルとテキスト間の余白を指定する */
-	border: double 4px #f0f0f0;/* ラベルのボーダーを指定する */
-}
-
-table.form {
-  border: 1px solid gray;
-}
-table.form th, .table1 td {
-  border: 1px solid gray;
-}
-
-/* 奇数行のスタイル */
-table.sample tr:nth-child(odd){
-  background-color:aliceblue;
-}
- 
-/* 偶数行のスタイル */
-table.sample tr:nth-child(even){
-  background-color:white;
-}
-_EOSTYLE_
-
-my $MY_URL = $ENV{REQUEST_URI};
-
-# Group   Year    Month   Day     Time    End Year        End Month       End Day End Time        Display Date    Title   Detail  林コメント/修正案       URL     Image URL       Im age Credit      Type    Color
-
+# Group   Year    Month   Day     Time    End Year        End Month       End Day End Time        Display Date    Evaluation
+#		Title   Detail  林コメント/修正案       URL     Image URL       Im age Credit      Type    Color
+#
+#	Form Parameters
+#
 my $form_params = [
 	[
 		{tag => "Evaluation", method => "select", 
-			params => [0,1]
+			params => [0,1, $NIL]
 		},
 		{tag => "Group", method => "select", 
 			params => ["世の中:society", "IT:IT", "政府機関:gov", "セキュリティ:security",
@@ -71,15 +46,12 @@ my $form_params = [
 		{tag => "Search", method => "text",
 			display_str => "seach", params => {size => 20, },
 		},
-    	# push(@forms, '<p><input type="submit" name="submit" value="送信" /></p>' . "\n");
 		{tag => "Download", method => "submit", display_str => "Download",}, 
-		{tag => "upload", method => "file", display_str => "upload data", params => {accept => "text/csv,image/plain"}}, 
 		{tag => "送信", method => "submit", display_str => "送信", },
 	],
-
 ];
 
-
+#	Compile Form Parameters
 my $param_index = {};
 my $param_vals = {};
 foreach my $params (@$form_params){
@@ -98,12 +70,11 @@ foreach my $params (@$form_params){
 }
 
 #
-#	CGI Params
+#	Get CGI Parameters
 #
-my $PARAMS = {};
 my $q = new CGI;
-
 my @names = $q->param;
+my $PARAMS = {};
 my $cgi = 1;
 if($MY_URL){		# command line
 	foreach my $nm (@names){
@@ -131,19 +102,18 @@ else {		# for commandline debug
 	}
 }
 
-
 #
-#	Gen HTML
+#	Gen HTML, output befor loading data for debug print
 #
 print &html_header("JNSA 年表") . "\n";
 print "<body>\n";
 
+#	Set CGI parameters to the array
 my $params = {};
 foreach my $nm (@names){
 	my @vals = ($cgi) ? $q->param($nm) : @{$PARAMS->{$nm}};
 	$params->{$nm} = [@vals];
 }
-
 if($DEBUG){		# Dump parameters
 	print "<br>";
 	foreach my $nm (keys %$params){
@@ -164,10 +134,8 @@ if($#dl >= 0 ){
 	&downlad_chroncile();
 }
 
-
 #
-#
-#	Load Data
+#	Load Chronicle Data
 #
 my @NENPYOU = ();
 open(FD, $jnsa_hist) || die "cannot open $jnsa_hist";
@@ -175,46 +143,46 @@ my $head = <FD>;
 chop($head);
 my @ITEM_LIST = split(/$dlm/, $head);
 
-my $skey = $PARAMS->{Search}->[0]//"";
+my $skey = $PARAMS->{Search}->[0]//"";		# Serach parameter in CGI
 #dp::dp "### [$skey] ###\n" if($DEBUG);
 my $rn = 0;
 while(<FD>){
 	s/[\r\n]+$//;
 	#dp::dp $_ . "\n";
 
-	my $str = &escape_html($_);
+	my $str = &escape_html($_);				# for injection
 	my @w = split(/$dlm/, $str);
-	next if(! $w[0]//"");
+	next if(! $w[0]//"");					# No data in first col (Group), go Next
+	next if($skey && (! /$skey/));			# No Skey in the data, go Next
 
-	if($skey){					# Search 
-		next if(! /$skey/);	
-	}
 	my $item = {};
 	$item->{rn} = $rn++;
 	my $disp_flag = 1;
-	for(my $i = 0; $i <= $#w; $i++){
-		my $key = $ITEM_LIST[$i]//"-NONE $i-";
+	for(my $i = 0; $i <= $#w; $i++){		# col data
+		my $key = $ITEM_LIST[$i]//"-NONE $i-";	# for debug, set NONE when the data is ""
 		my $v = $w[$i];
-		$item->{$key} = $v;
+		$item->{$key} = $v;					# set value of  key 
 		#dp::dp "[$i:$key:$v]\n";
 		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
 			#dp::dp "[$key:$v:" . join(@$kv) . "]\n" if($rn < 5);
 			my $hit = 0;
 			foreach my $pv (@$kv){
-				my $dsp = $param_vals->{$key}->{$pv};
-				$hit++ if($v eq ($param_vals->{$key}->{$pv}//""));
-
+				my $dsp = $param_vals->{$key}->{$pv}//"";
+				if($dsp eq $NIL){			# for NIL (No data)
+					$dsp = "";
+				}
+				$hit++ if($v eq $dsp);
 				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")" if($rn < 5);
 			}
-			if($hit <= 0){
+			if($hit <= 0){					# no target data if one selected item does not hit
 				$disp_flag = 0;
 				last;
 			}
 		}
 
 	}
-	next if(! $disp_flag);			# data does not much the parameter
+	next if(! $disp_flag);					# data does not much the parameter
 
 	my $dd = $item->{"Display Date"}//"";	# Set Display date from Year, Month, Day  
 	if(! $dd ||  !($dd =~ /-\d{4}/)){
@@ -222,12 +190,12 @@ while(<FD>){
 			&numeric($item->{Year}), &numeric($item->{Month}), &numeric($item->{Day}));
 		$item->{"Display Date"} = $ymd;
 	}
-	push(@NENPYOU, $item);			# Records to display
+	push(@NENPYOU, $item);					# Records to display
 }
 close(FD);
 
 #
-#	Set array no of Display_ITEMS
+#	Set array # of Display_ITEMS
 #
 foreach my $item (@$DISPLAY_ITEMS){
 	for(my $i = 0; $i <= $#ITEM_LIST; $i++){
@@ -238,9 +206,9 @@ foreach my $item (@$DISPLAY_ITEMS){
 	}
 }
 
-
+########################################
 #
-#	Print HTML
+#	Output HTML data
 #
 foreach my $params (@$form_params){
 	print '<table class="form" border="1">' . "\n";
@@ -250,12 +218,9 @@ foreach my $params (@$form_params){
 print "<hr>\n";
 
 #
-#	Link to spread sheet
+#	Link of the spread sheet
 #
 print "<a href=\"$spread_sheet\">元データ(Spread Sheet)</a><br>" . "\n";
-
-
-#print '<table class="sample">' . "\n";
 print '<table>' . "\n";
 $head =  "<tr>";
 for(my $i = 0; $i < scalar(@$DISPLAY_ITEMS); $i++){
@@ -265,37 +230,34 @@ for(my $i = 0; $i < scalar(@$DISPLAY_ITEMS); $i++){
 	$head .= 	&print_item("<th bgcolor=\"gray\" width=\"$width\">", $item); 
 }
 $head .= "</tr>\n";
-#$head =  &gen_tag("<tr>", &print_item('<th bgcolor="gray">', @$DISPLAY_ITEMS)); 
 print $head . "\n";
 my $last_date = "0000-00";
 my @item_list = ();
 
 my $na = {};
 foreach my $k (@ITEM_LIST){
-	#dp::dp "$k\n";
-	#$na->{$k} = "&nbsp;";
-	$na->{$k} = "-";
+	$na->{$k} = "-";	# "&nbsp;"
 }
 
+#
+#	Sorted Target (HIT) Record
+#
 my	$month_no = 0;
-
 foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
 	$item->{"Display Date"} =~ /\d{4}-\d{2}/;
 	my $item_date = $&;
-	if($item_date eq $last_date){
-		push(@item_list, $item);
+	if($item_date eq $last_date){		# for monthly base output
+		push(@item_list, $item);		# set to print
 		next;
 	}
-	#dp::dp "[$last_date:$item_date]" . join(",", &item_list($item, $DISPLAY_ITEMS_NO)) . "\n";
-#	my $html =  &gen_tag("<tr>", &print_item("<td>", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
-
+	#	output pushed items to @item_list
 	my $cl = $table_color[$month_no % 2];
 	foreach my $item (@item_list){
 		print &row($item, $cl);
 	}	
-	#my $html =  &gen_tag("<tr>", &print_item_list("<td>", @item_list)) ; 
 	$month_no++;
 
+	#	output no taget data month
 	foreach my $ym (&month_diff($last_date, $item_date)){
 		#dp::dp ">>>> $ym" . "\n";
 		$cl = $table_color[$month_no % 2];
@@ -309,7 +271,7 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 	@item_list = ($item);
 	$last_date = $item_date;
 }
-if($#item_list >= 0){
+if($#item_list >= 0){					# output final items in @item_list
 	my $cl = $table_color[$month_no % 2];
 	foreach my $item (@item_list){
 		print &row($item, $cl);
@@ -323,6 +285,9 @@ print "</html>\n";
 exit 0;
 
 
+#
+#	output one row as table (TR, TD)
+#
 sub	row
 {
 	my($item, $cl) = @_;
@@ -337,6 +302,9 @@ sub	row
 	return $html;
 }
 
+#
+#	output missing month
+#
 sub	month_diff
 {
 	my ($last_date, $item_date) = @_;
@@ -359,6 +327,9 @@ sub	month_diff
 	return (@month);
 }
 
+#
+#	Increment Month 
+#
 sub	increment_month
 {
 	my($y, $m) = @_;
@@ -374,7 +345,7 @@ sub	increment_month
 }
 
 #
-#
+#	Force to Numeric Value
 #
 sub	numeric
 {
@@ -386,6 +357,10 @@ sub	numeric
    	$n = 0 if($n =~ /\D/);
 	return $n;
 }
+
+#
+#	output Array of item list as HTML with $tag
+#
 sub	print_item_list
 {
 	my ($tag, @items) = @_;
@@ -411,6 +386,10 @@ sub	print_item_list
 	}
 	return $str;
 }
+
+#
+#	output item list as HTML with $tag
+#
 sub	print_item
 {
 	my ($tag, @items) = @_;
@@ -425,6 +404,9 @@ sub	print_item
 	return $str;
 }
 
+#
+#	Pickup target col from data (a line)
+#
 sub	item_list
 {
 	my ($item, $targets) = @_;
@@ -442,6 +424,9 @@ sub	item_list
 	return @ww;
 }
 
+#
+#	<$tag> $str </$tag>
+#
 sub	gen_tag
 {
 	my($tag, $str) = @_;
@@ -452,6 +437,9 @@ sub	gen_tag
 	return ($tag . " $str " . $etag . "\n");
 }
 
+#
+#	Generate Form Parameter from Form Defintion
+#
 sub	print_form
 {
 	my ($params) = @_;
@@ -476,7 +464,7 @@ sub	print_form
 			$str .= '<select name="' . $p->{tag} . '" size="' . "5" . '" multiple="multiple">' . "\n";
 
 			my @selected_list = (defined $PARAMS->{$tag}) ? @{$PARAMS->{$tag}} : ();
-			foreach my $g ("$NA:$NA", @group, "$NA:$NA"){
+			foreach my $g ("$NA:$NA", @group,){ # "$NA:$NA"){
 				my ($dsp, $val) = split(/:/, $g);
 				$val = $val//$dsp;
 				my $select = (grep{$_ eq $val} @selected_list) ? 'selected="selected"' : "";
@@ -539,6 +527,7 @@ sub	html_header
 {
 	my ($title) = @_;
 	$title = $title//"--";
+	my $css = &get_css();
 
 my $HTML_HEAD = <<_EOHTML_;
 Content-type: text/html
@@ -550,7 +539,7 @@ Content-type: text/html
 <meta charset="utf-8">
 <title> #TITLE# </title>
 <style>
-$HTML_STYLE
+$css
 </style>
 </head>
 _EOHTML_
@@ -561,7 +550,7 @@ _EOHTML_
 }
 
 #
-#
+#	Download JNSA Chronicle data from the google spread sheet 
 #
 sub	downlad_chroncile
 {
@@ -595,6 +584,9 @@ sub	downlad_chroncile
 	return 0;
 }
 
+#
+#	for injection
+#
 sub	escape_html
 {
 	my ($str) = @_;
@@ -606,4 +598,35 @@ sub	escape_html
 
     $str =~ s/\|/&brvbar;/go;
     return $str;
+}
+
+sub	get_css
+{
+my $css = <<_EOSTYLE_;
+.upload {
+	display: none;
+	color: #f0f0f0; /* ラベルテキストの色を指定する */
+	background-color: #000000;/* ラベルの背景色を指定する */
+	padding: 10px; /* ラベルとテキスト間の余白を指定する */
+	border: double 4px #f0f0f0;/* ラベルのボーダーを指定する */
+}
+table.form {
+  border: 1px solid gray;
+}
+table.form th, .table1 td {
+  border: 1px solid gray;
+}
+
+/* 奇数行のスタイル */
+table.sample tr:nth-child(odd){
+  background-color:aliceblue;
+}
+ 
+/* 偶数行のスタイル */
+table.sample tr:nth-child(even){
+  background-color:white;
+}
+_EOSTYLE_
+
+return $css;
 }
