@@ -21,8 +21,8 @@ my $NA = "ALL";
 my $NIL = "NIL";
 
 my @table_color = ("white", "lightsteelblue"); #"aliceblue");
-my $DISPLAY_ITEMS = ["Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
-my $DISPLAY_WIDTH = [20, 150, 200, 600, 200, 100];				# cell width by dot
+my $DISPLAY_ITEMS = ["rn", "Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
+my $DISPLAY_WIDTH = [10, 20, 150, 200, 600, 200, 100];				# cell width by dot
 my $DISPLAY_ITEMS_NO = [];
 my @dm_params = ("Group:", "Year:2011", "Search:", "送信:送信", ); #"Download:Download");
 
@@ -198,12 +198,14 @@ close(FD);
 #	Set array # of Display_ITEMS
 #
 foreach my $item (@$DISPLAY_ITEMS){
-	for(my $i = 0; $i <= $#ITEM_LIST; $i++){
-		if($item eq $ITEM_LIST[$i]){
-			push(@$DISPLAY_ITEMS_NO, $i);
+	my $cl = 0;
+	for(; $cl <= $#ITEM_LIST; $cl++){
+		if($item eq $ITEM_LIST[$cl]){
 			last;
 		}
 	}
+	$cl = $item if($cl > $#ITEM_LIST);
+	push(@$DISPLAY_ITEMS_NO, $cl);
 }
 
 ########################################
@@ -242,10 +244,12 @@ foreach my $k (@ITEM_LIST){
 #
 #	Sorted Target (HIT) Record
 #
-my	$month_no = 0;
+my $month_no = 0;
+$rn = 1;
 foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
 	$item->{"Display Date"} =~ /\d{4}-\d{2}/;
 	my $item_date = $&;
+	$item->{rn} = $rn++;
 	if($item_date eq $last_date){		# for monthly base output
 		push(@item_list, $item);		# set to print
 		next;
@@ -417,8 +421,9 @@ sub	item_list
 		push(@vals, $item->{$key}//"");
 	}
 	my @ww = ();
-	foreach my $i (@$targets){
-		push(@ww, $vals[$i]);
+	foreach my $cl (@$targets){
+		my $v = ($cl =~ /\D/) ? $item->{$cl}//"none" : $vals[$cl];
+		push(@ww, $v);
 	}
 	#dp::dp join(",", $#ww, @ww) . "<br>\n";
 	return @ww;
