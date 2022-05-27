@@ -19,10 +19,11 @@ my $MY_URL = $ENV{REQUEST_URI};
 my $dlm = "\t";
 my $NA = "ALL";
 my $NIL = "NIL";
+my $EMPTY_MONTH = 1;
 
 my @table_color = ("white", "lightsteelblue"); #"aliceblue");
-my $DISPLAY_ITEMS = ["rn", "Evaluation", "Display Date", "Group", "Title", "Detail",];# "URL"];
-my $DISPLAY_WIDTH = [10, 20, 150, 200, 600, 200, 100];				# cell width by dot
+my $DISPLAY_ITEMS = ["rn", "Evaluation", "Display Date", "Group", "Title", "Detail","Checker"];# "URL"];
+my $DISPLAY_WIDTH = [10, 20, 150, 200, 600, 60, 60];				# cell width by dot
 my $DISPLAY_ITEMS_NO = [];
 my @dm_params = ("Group:", "Year:2011", "Search:", "送信:送信", ); #"Download:Download");
 
@@ -41,11 +42,21 @@ my $form_params = [
 					 "JNSA:jnsa", "JNSA活動:JNSA-act", "JNSA会員数:JNSA-member", ]
 		},
 		{tag => "Year", method => "select",
-			params => [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011],
+			params => [ 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+						2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
 		},
 		{tag => "Search", method => "text",
 			display_str => "seach", params => {size => 20, },
 		},
+		# cat jnsa*.tsv | cut  -f 14 | sort | uniq
+		{tag => "Checker", method => "select",
+			params => [ "伊藤", "永野", "河本", "丸山", "高橋", "持田", "小屋",
+						"西尾", "中山", "唐沢", "畑",   "冨田"],
+		},
+		{tag => "Debug", method => "select", 
+			params => [0,1]
+		},
+
 		{tag => "Download", method => "submit", display_str => "Download",}, 
 		{tag => "送信", method => "submit", display_str => "送信", },
 	],
@@ -100,6 +111,12 @@ else {		# for commandline debug
 			$PARAMS->{$nm} = [@vals] ;
 		}
 	}
+}
+if($PARAMS->{Debug}//""){
+	$DEBUG = 1;
+}
+if($PARAMS->{Checker}//""){
+	$EMPTY_MONTH = 0;
 }
 
 #
@@ -158,22 +175,22 @@ while(<FD>){
 	my $item = {};
 	$item->{rn} = $rn++;
 	my $disp_flag = 1;
-	for(my $i = 0; $i <= $#w; $i++){		# col data
+	for(my $i = 0; $i <= $#ITEM_LIST; $i++){		# col data
 		my $key = $ITEM_LIST[$i]//"-NONE $i-";	# for debug, set NONE when the data is ""
 		my $v = $w[$i];
 		$item->{$key} = $v;					# set value of  key 
-		#dp::dp "[$i:$key:$v]\n";
+		#dp::dp "[$i:$key:$v]<br>\n";
 		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
 			#dp::dp "[$key:$v:" . join(@$kv) . "]\n" if($rn < 5);
 			my $hit = 0;
 			foreach my $pv (@$kv){
-				my $dsp = $param_vals->{$key}->{$pv}//"";
+				my $dsp = $param_vals->{$key}->{$pv}//"#None#";
 				if($dsp eq $NIL){			# for NIL (No data)
 					$dsp = "";
 				}
 				$hit++ if($v eq $dsp);
-				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")" if($rn < 5);
+				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")<br>" ;#if($rn < 5);
 			}
 			if($hit <= 0){					# no target data if one selected item does not hit
 				$disp_flag = 0;
@@ -182,8 +199,9 @@ while(<FD>){
 		}
 
 	}
-	next if(! $disp_flag);					# data does not much the parameter
+	next if($disp_flag <= 0);					# data does not much the parameter
 
+	#dp::dp "[HIT] $_ <br>\n";
 	my $dd = $item->{"Display Date"}//"";	# Set Display date from Year, Month, Day  
 	if(! $dd ||  !($dd =~ /-\d{4}/)){
 		my $ymd = sprintf("%04d-%02d-%02d", 
@@ -268,7 +286,7 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 		$na->{"Display Date"} = $ym . "-00";
 
 		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($na, $DISPLAY_ITEMS_NO))) ; 
-		print $html . "\n";
+		print $html . "\n" if($EMPTY_MONTH);
 		$month_no++;
 	}
 
@@ -422,7 +440,7 @@ sub	item_list
 	}
 	my @ww = ();
 	foreach my $cl (@$targets){
-		my $v = ($cl =~ /\D/) ? $item->{$cl}//"none" : $vals[$cl];
+		my $v = ($cl =~ /\D/) ? $item->{$cl}//" " : $vals[$cl];
 		push(@ww, $v);
 	}
 	#dp::dp join(",", $#ww, @ww) . "<br>\n";
