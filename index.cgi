@@ -22,16 +22,27 @@ my $NIL = "NIL";
 my $EMPTY_MONTH = 1;
 
 my @table_color = ("white", "lightsteelblue"); #"aliceblue");
-my $DISPLAY_ITEMS = ["rn", "Evaluation", "Display Date", "Group", "Title", "Detail","Checker"];# "URL"];
-my $DISPLAY_WIDTH = [10, 20, 150, 200, 600, 60, 60];				# cell width by dot
+my $DISPLAY_DEFS = [ {item => "rn", width => 10, align => "right"},
+					{item => "Evaluation", width => 20, align => "center"},
+					{item => "Display Date", witdh => 150,},
+					{item => "Group", width => 200, },
+					{item => "Title", width => 600, },
+					{item => "InCharge", width => 60, align => "center"},
+					{item => "Checker", width => 60,align => "center"},
+				];
 my $DISPLAY_ITEMS_NO = [];
-my @dm_params = ("Group:", "Year:2011", "Search:", "送信:送信", ); #"Download:Download");
+my @dm_params = ("Group:", "Year:2000", "Search:", "送信:送信", ); #"Download:Download");
+
 
 # Group   Year    Month   Day     Time    End Year        End Month       End Day End Time        Display Date    Evaluation
 #		Title   Detail  林コメント/修正案       URL     Image URL       Im age Credit      Type    Color
 #
 #	Form Parameters
 #
+
+# cat jnsa*.tsv | cut  -f 14 | sort | uniq
+my	@members = ("伊藤", "永野", "河本", "丸山", "高橋", "持田", "小屋",
+						"西尾", "中山", "唐沢", "畑",   "冨田",);
 my $form_params = [
 	[
 		{tag => "Evaluation", method => "select", 
@@ -48,10 +59,11 @@ my $form_params = [
 		{tag => "Search", method => "text",
 			display_str => "seach", params => {size => 20, },
 		},
-		# cat jnsa*.tsv | cut  -f 14 | sort | uniq
+		{tag => "InCharge", method => "select",
+			params => [@members],
+		},
 		{tag => "Checker", method => "select",
-			params => [ "伊藤", "永野", "河本", "丸山", "高橋", "持田", "小屋",
-						"西尾", "中山", "唐沢", "畑",   "冨田"],
+			params => [@members],
 		},
 		{tag => "Debug", method => "select", 
 			params => [0,1]
@@ -115,7 +127,7 @@ else {		# for commandline debug
 if($PARAMS->{Debug}//""){
 	$DEBUG = 1;
 }
-if($PARAMS->{Checker}//""){
+if(($PARAMS->{Checker}//"") || ($PARAMS->{InCharge}//"")){
 	$EMPTY_MONTH = 0;
 }
 
@@ -177,8 +189,9 @@ while(<FD>){
 	my $disp_flag = 1;
 	for(my $i = 0; $i <= $#ITEM_LIST; $i++){		# col data
 		my $key = $ITEM_LIST[$i]//"-NONE $i-";	# for debug, set NONE when the data is ""
-		my $v = $w[$i];
+		my $v = $w[$i]//"";
 		$item->{$key} = $v;					# set value of  key 
+		#dp::dp "[$key][$v]<br>\n" if($key eq "URL");
 		#dp::dp "[$i:$key:$v]<br>\n";
 		if(defined $PARAMS->{$key}){		# Check Selected parameter for Group, Year
 			my $kv = $PARAMS->{$key};
@@ -189,7 +202,8 @@ while(<FD>){
 				if($dsp eq $NIL){			# for NIL (No data)
 					$dsp = "";
 				}
-				$hit++ if($v eq $dsp);
+				#$hit++ if($v eq $dsp);
+				$hit++ if($v =~ /$dsp/);
 				#dp::dp "($hit :$v:$pv:" . join(",", keys %{$param_vals->{$key}}, "<$dsp>") . ")<br>" ;#if($rn < 5);
 			}
 			if($hit <= 0){					# no target data if one selected item does not hit
@@ -208,6 +222,7 @@ while(<FD>){
 			&numeric($item->{Year}), &numeric($item->{Month}), &numeric($item->{Day}));
 		$item->{"Display Date"} = $ymd;
 	}
+	#dp::dp join(",", $item->{Title}, $item->{URL}) . "<br>\n";
 	push(@NENPYOU, $item);					# Records to display
 }
 close(FD);
@@ -215,14 +230,14 @@ close(FD);
 #
 #	Set array # of Display_ITEMS
 #
-foreach my $item (@$DISPLAY_ITEMS){
+foreach my $def (@$DISPLAY_DEFS){
 	my $cl = 0;
 	for(; $cl <= $#ITEM_LIST; $cl++){
-		if($item eq $ITEM_LIST[$cl]){
+		if($def->{item} eq $ITEM_LIST[$cl]){
 			last;
 		}
 	}
-	$cl = $item if($cl > $#ITEM_LIST);
+	$cl = $def->{item} if($cl > $#ITEM_LIST);
 	push(@$DISPLAY_ITEMS_NO, $cl);
 }
 
@@ -243,9 +258,9 @@ print "<hr>\n";
 print "<a href=\"$spread_sheet\">元データ(Spread Sheet)</a><br>" . "\n";
 print '<table>' . "\n";
 $head =  "<tr>";
-for(my $i = 0; $i < scalar(@$DISPLAY_ITEMS); $i++){
-	my $item = $DISPLAY_ITEMS->[$i];
-	my $width = $DISPLAY_WIDTH->[$i]//0;
+for(my $i = 0; $i < scalar(@$DISPLAY_DEFS); $i++){
+	my $item = $DISPLAY_DEFS->[$i]->{item}//"";
+	my $width = $DISPLAY_DEFS->[$i]->{width}//0;
 	$item =~ s/Evaluation/EV/;
 	$head .= 	&print_item("<th bgcolor=\"gray\" width=\"$width\">", $item); 
 }
@@ -265,6 +280,11 @@ foreach my $k (@ITEM_LIST){
 my $month_no = 0;
 $rn = 1;
 foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU){
+	#if($item->{Title} =~ /IT革命/){
+	#	dp::dp join(",", $item->{Title}, $item->{URL}) . "<br>\n";
+	#	my $ip = $NENPYOU[4];
+	#	dp::dp "#####" . join(",", $ip->{Title}, $ip->{URL}) . "<br>\n";
+	#}	
 	$item->{"Display Date"} =~ /\d{4}-\d{2}/;
 	my $item_date = $&;
 	$item->{rn} = $rn++;
@@ -285,7 +305,7 @@ foreach my $item (sort {$a->{"Display Date"} cmp $b->{"Display Date"}} @NENPYOU)
 		$cl = $table_color[$month_no % 2];
 		$na->{"Display Date"} = $ym . "-00";
 
-		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($na, $DISPLAY_ITEMS_NO))) ; 
+		my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($na, $DISPLAY_ITEMS_NO, 1)), {align => 1}) ; 
 		print $html . "\n" if($EMPTY_MONTH);
 		$month_no++;
 	}
@@ -314,12 +334,13 @@ sub	row
 {
 	my($item, $cl) = @_;
 
+	#dp::dp join(",", $item->{Title}, $item->{URL}) . "<br>\n";
 	my $url = $item->{URL}//"";
 	my $title = $item->{Title}//"NO TITLE";
 	if($url =~ /https*:/){
 		$item->{Title} = "<a href=\"$url\" target=\"_blank\">$title</a>"; 
 	}
-	#dp::dp "$url\n";
+	#dp::dp "$title url: [$url]\n";
 	my $html = &gen_tag("<tr>", &print_item("<td bgcolor=\"$cl\">", &item_list($item, $DISPLAY_ITEMS_NO))) ; 
 	return $html;
 }
@@ -414,13 +435,19 @@ sub	print_item_list
 #
 sub	print_item
 {
-	my ($tag, @items) = @_;
+	my ($tag, @items, $p) = @_;
 	$tag = $tag//$dlm;
 
 	my $str = "";
-	foreach my $v (@items){
-		my $it = &gen_tag($tag, $v);
-		#print "[$it]\n";
+	for(my $i = 0; $i <= $#items; $i++){
+		my $v = $items[$i];
+		my $aln = $DISPLAY_DEFS->[$i]->{align}//"";
+		my $tgw = $tag;
+		if(($p->{align}//"") && $aln){
+			$tgw =~ s/\>/ align=\"$aln\"\>/;
+		}
+		my $it = &gen_tag($tgw, $v);
+		#dp::dp "[$tag] [$it]<br>\n";
 		$str .= $it;
 	}
 	return $str;
@@ -453,7 +480,7 @@ sub	item_list
 sub	gen_tag
 {
 	my($tag, $str) = @_;
-
+	$str = $str//"";
 	my $etag = $tag;
 	$etag =~ s/\</\<\//;
 	$etag =~ s/ .*>/>/;
